@@ -9,6 +9,12 @@
 **/
 
 #include "NvmExpress.h"
+#include <Library/TimerLib.h> // DMA_REMAP_PERF_DEBUG
+
+// DMA_REMAP_PERF_DEBUG [BEGIN] - temporary NVMe binding timing instrumentation
+#define NVME_PERF_ELAPSED_US(Start)  \
+  (DivU64x32 (GetTimeInNanoSecond (GetPerformanceCounter () - (Start)), 1000))
+// DMA_REMAP_PERF_DEBUG [END]
 
 //
 // NVM Express Driver Binding Protocol Instance
@@ -1149,6 +1155,21 @@ NvmExpressDriverBindingStart (
 
   EFI_NVM_EXPRESS_PASS_THRU_PROTOCOL  *Passthru;
   UINT32                              FilterNsId; // MU_CHANGE - NVMe namespace filtering
+  // DMA_REMAP_PERF_DEBUG [BEGIN]
+  UINT64                              PerfStart;
+  UINT64                              PerfPhase;
+  UINTN                               PerfSeg;
+  UINTN                               PerfBus;
+  UINTN                               PerfDev;
+  UINTN                               PerfFunc;
+
+  PerfStart = GetPerformanceCounter ();
+  PerfPhase = PerfStart;
+  PerfSeg   = 0;
+  PerfBus   = 0;
+  PerfDev   = 0;
+  PerfFunc  = 0;
+  // DMA_REMAP_PERF_DEBUG [END]
 
   DEBUG ((DEBUG_INFO, "NvmExpressDriverBindingStart: start\n"));
 
@@ -1180,6 +1201,19 @@ NvmExpressDriverBindingStart (
   if (EFI_ERROR (Status) && (Status != EFI_ALREADY_STARTED)) {
     return Status;
   }
+
+  // DMA_REMAP_PERF_DEBUG [BEGIN]
+  PciIo->GetLocation (PciIo, &PerfSeg, &PerfBus, &PerfDev, &PerfFunc);
+  DEBUG ((
+    DEBUG_INFO,
+    "[NVME_PERF] %04x:%02x:%02x.%x BindingStart begin (AlreadyStarted=%d)\n",
+    (UINT32)PerfSeg,
+    (UINT32)PerfBus,
+    (UINT32)PerfDev,
+    (UINT32)PerfFunc,
+    (Status == EFI_ALREADY_STARTED)
+    ));
+  // DMA_REMAP_PERF_DEBUG [END]
 
   //
   // Check EFI_ALREADY_STARTED to reuse the original NVME_CONTROLLER_PRIVATE_DATA.
@@ -1276,7 +1310,20 @@ NvmExpressDriverBindingStart (
     InitializeListHead (&Private->AsyncPassThruQueue);
     InitializeListHead (&Private->UnsubmittedSubtasks);
 
-    Status = NvmeControllerInit (Private);
+    PerfPhase = GetPerformanceCounter (); // DMA_REMAP_PERF_DEBUG
+    Status    = NvmeControllerInit (Private);
+    // DMA_REMAP_PERF_DEBUG [BEGIN]
+    DEBUG ((
+      DEBUG_INFO,
+      "[NVME_PERF] %04x:%02x:%02x.%x NvmeControllerInit = %r, %ld us\n",
+      (UINT32)PerfSeg,
+      (UINT32)PerfBus,
+      (UINT32)PerfDev,
+      (UINT32)PerfFunc,
+      Status,
+      NVME_PERF_ELAPSED_US (PerfPhase)
+      ));
+    // DMA_REMAP_PERF_DEBUG [END]
     if (EFI_ERROR (Status)) {
       goto Exit;
     }
@@ -1343,6 +1390,7 @@ NvmExpressDriverBindingStart (
   FilterNsId = PcdGet32 (PcdNvmeNamespaceFilterId);
   // MU_CHANGE [END] - NVMe namespace filtering
 
+  PerfPhase = GetPerformanceCounter (); // DMA_REMAP_PERF_DEBUG
   if (RemainingDevicePath == NULL) {
     //
     // Enumerate all NVME namespaces in the controller
@@ -1377,6 +1425,28 @@ NvmExpressDriverBindingStart (
       // MU_CHANGE [END] - NVMe namespace filtering
     }
   }
+
+  // DMA_REMAP_PERF_DEBUG [BEGIN]
+  DEBUG ((
+    DEBUG_INFO,
+    "[NVME_PERF] %04x:%02x:%02x.%x Namespace enumeration = %r, %ld us\n",
+    (UINT32)PerfSeg,
+    (UINT32)PerfBus,
+    (UINT32)PerfDev,
+    (UINT32)PerfFunc,
+    Status,
+    NVME_PERF_ELAPSED_US (PerfPhase)
+    ));
+  DEBUG ((
+    DEBUG_INFO,
+    "[NVME_PERF] %04x:%02x:%02x.%x BindingStart total = %ld us\n",
+    (UINT32)PerfSeg,
+    (UINT32)PerfBus,
+    (UINT32)PerfDev,
+    (UINT32)PerfFunc,
+    NVME_PERF_ELAPSED_US (PerfStart)
+    ));
+  // DMA_REMAP_PERF_DEBUG [END]
 
   DEBUG ((DEBUG_INFO, "NvmExpressDriverBindingStart: end successfully\n"));
   return EFI_SUCCESS;
@@ -1424,6 +1494,15 @@ Exit:
          Controller
          );
 
+  DEBUG ((
+    DEBUG_INFO,
+    "[NVME_PERF] %04x:%02x:%02x.%x BindingStart FAILED total = %ld us\n",
+    (UINT32)PerfSeg,
+    (UINT32)PerfBus,
+    (UINT32)PerfDev,
+    (UINT32)PerfFunc,
+    NVME_PERF_ELAPSED_US (PerfStart)
+    )); // DMA_REMAP_PERF_DEBUG
   DEBUG ((DEBUG_INFO, "NvmExpressDriverBindingStart: end with %r\n", Status));
 
   return Status;

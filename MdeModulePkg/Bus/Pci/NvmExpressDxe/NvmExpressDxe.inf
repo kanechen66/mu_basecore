@@ -62,6 +62,7 @@
   UefiLib
   PrintLib
   ReportStatusCodeLib
+  TimerLib  # DMA_REMAP_PERF_DEBUG
 
 [Protocols]
   gEfiPciIoProtocolGuid                       ## TO_START
