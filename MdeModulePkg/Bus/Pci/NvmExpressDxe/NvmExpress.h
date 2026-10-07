@@ -278,6 +278,13 @@ struct _NVME_CONTROLLER_PRIVATE_DATA {
   EFI_EVENT      TimerEvent;
   LIST_ENTRY     AsyncPassThruQueue;
   LIST_ENTRY     UnsubmittedSubtasks;
+
+  // MU_CHANGE [BEGIN] - Skip namespace re-discovery on reconnect
+  //
+  // TRUE once DiscoverAllNamespaces has run for this controller.
+  //
+  BOOLEAN        AllNamespacesDiscovered;
+  // MU_CHANGE [END] - Skip namespace re-discovery on reconnect
 };
 
 #define NVME_CONTROLLER_PRIVATE_DATA_FROM_PASS_THRU(a) \

@@ -1384,6 +1384,29 @@ NvmExpressDriverBindingStart (
     }
 
     Private = NVME_CONTROLLER_PRIVATE_DATA_FROM_PASS_THRU (Passthru);
+
+    // MU_CHANGE [BEGIN] - Skip namespace re-discovery on reconnect
+    //
+    // If all namespaces were already discovered on a previous start, a
+    // ConnectAll-style reconnect (RemainingDevicePath == NULL) would re-issue
+    // Identify Namespace for every NSID and only find existing children,
+    // which is costly on controllers with large NN.
+    //
+    if ((RemainingDevicePath == NULL) && Private->AllNamespacesDiscovered) {
+      DEBUG ((
+        DEBUG_INFO,
+        "[NVME_PERF] %04x:%02x:%02x.%x Reconnect skip namespace re-discovery, %ld us\n",
+        (UINT32)PerfSeg,
+        (UINT32)PerfBus,
+        (UINT32)PerfDev,
+        (UINT32)PerfFunc,
+        NVME_PERF_ELAPSED_US (PerfStart)
+        )); // DMA_REMAP_PERF_DEBUG
+      DEBUG ((DEBUG_INFO, "NvmExpressDriverBindingStart: end successfully\n"));
+      return EFI_SUCCESS;
+    }
+
+    // MU_CHANGE [END] - Skip namespace re-discovery on reconnect
   }
 
   // MU_CHANGE [BEGIN] - NVMe namespace filtering
@@ -1401,6 +1424,12 @@ NvmExpressDriverBindingStart (
                FilterNsId
                );
     // MU_CHANGE [END] - NVMe namespace filtering
+    // MU_CHANGE [BEGIN] - Skip namespace re-discovery on reconnect
+    if (!EFI_ERROR (Status)) {
+      Private->AllNamespacesDiscovered = TRUE;
+    }
+
+    // MU_CHANGE [END] - Skip namespace re-discovery on reconnect
   } else if (!IsDevicePathEnd (RemainingDevicePath)) {
     //
     // Enumerate the specified NVME namespace
